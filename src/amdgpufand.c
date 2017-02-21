@@ -11,7 +11,7 @@
 
 #define MAX_CARDS 8
 #define MAX_TABLE_SIZE 10
-#define MIN_PCT 10
+#define MIN_PCT 0
 
 struct card {
 	int pwm;
@@ -48,13 +48,13 @@ int data_init()
 			cards[i].table[j][0]=100;
 		}
 		//temporary static table
-		cards[i].table[0][0] = 25;
+		cards[i].table[0][0] = 40;
 		cards[i].table[0][1] = 0;
-		cards[i].table[1][0] = 30;
-		cards[i].table[1][1] = 10;
-		cards[i].table[2][0] = 40;
-		cards[i].table[2][1] = 15;
-		cards[i].table[3][0] = 50;
+		cards[i].table[1][0] = 45;
+		cards[i].table[1][1] = 15;
+		cards[i].table[2][0] = 50;
+		cards[i].table[2][1] = 20;
+		cards[i].table[3][0] = 55;
 		cards[i].table[3][1] = 30;
 		cards[i].table[4][0] = 60;
 		cards[i].table[4][1] = 50;
@@ -258,10 +258,11 @@ int probe_cards()
 			}
 		}
 		free(epsc[i]);
-//		free(epsh);
-//		epsh = NULL;
+		if(hwmon > 0)
+			free(epsh);
 	}
-	free(epsc);
+	if(cardnum > 0)
+		free(epsc);
 }
 
 int read_config()
