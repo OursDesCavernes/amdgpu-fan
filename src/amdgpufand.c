@@ -12,6 +12,7 @@
 #define MAX_CARDS 8
 #define MAX_TABLE_SIZE 10
 #define MIN_PCT 0
+#define HYSTERESIS 5
 
 struct card {
 	int pwm;
@@ -22,7 +23,9 @@ struct card {
 	int tempfd;
 	int ready;
 	char name[1024];
-	int table[MAX_TABLE_SIZE][2];};
+	int table[MAX_TABLE_SIZE][2];
+	int temp_hist[HYSTERESIS];
+	int hpct;};
 
 typedef struct card card;
 
@@ -63,6 +66,9 @@ int data_init()
 		cards[i].table[6][0] = 80;
 		cards[i].table[6][1] = 100;
 	}
+	for(i=0;i<HYSTERESIS;i++)
+		cards[i].temp_hist[i] = 0;
+	
 	if(MIN_PCT<0||MIN_PCT>100)
 		exit(-1);
 	return 0;
@@ -135,32 +141,43 @@ int set_pwm(int n, int pct)
 
 int calc_pct(int n)
 {
-	int pct = -1, i;
+	int pct = -1,hpct, i;
 	get_temp(n);
 	for(i=0;i<MAX_TABLE_SIZE;i++)
 	{
-		if(cards[n].temp < cards[i].table[i][0])
+		if(cards[n].temp < cards[n].table[i][0])
+		{
+			pct = cards[n].table[i][1];
+			break;
+		}
+		else if(cards[n].temp > cards[n].table[i][0] && i + 1 == MAX_TABLE_SIZE)
+		{
+			pct = cards[n].table[i][1];
+			break;
+		}
+		else if(cards[n].temp > cards[n].table[i][0] && cards[n].table[i][0] >= cards[n].table[i+1][0])
 		{
 			pct = cards[i].table[i][1];
 			break;
 		}
-		else if(cards[n].temp > cards[i].table[i][0] && i + 1 == MAX_TABLE_SIZE)
+		else if(cards[n].temp >= cards[n].table[i][0] && cards[n].temp < cards[n].table[i+1][0])
 		{
-			pct = cards[i].table[i][1];
-			break;
-		}
-		else if(cards[n].temp > cards[i].table[i][0] && cards[i].table[i][0] >= cards[i].table[i+1][0])
-		{
-			pct = cards[i].table[i][1];
-			break;
-		}
-		else if(cards[n].temp >= cards[i].table[i][0] && cards[n].temp < cards[i].table[i+1][0])
-		{
-			pct = cards[i].table[i][1] + ((cards[i].table[i+1][1] - cards[i].table[i][1]) * (cards[n].temp - cards[i].table[i][0]) / (cards[i].table[i+1][0] - cards[i].table[i][0]));
+			pct = cards[n].table[i][1] + ((cards[n].table[i+1][1] - cards[n].table[i][1]) * (cards[n].temp - cards[i].table[n][0]) / (cards[n].table[i+1][0] - cards[n].table[i][0]));
 			break;
 		}
 	}
-	set_pwm(n,pct);
+	hpct = pct;
+	for(i=0;i<HYSTERESIS - 1;i++)
+	{
+		if(cards[n].temp_hist[i] - i > hpct)
+			hpct = cards[n].temp_hist[i];
+		cards[n].temp_hist[i+1] = cards[n].temp_hist[i];
+	}
+	if(hpct + 5 < cards[n].hpct)
+		hpct = cards[n].hpct - 5;
+	cards[n].hpct = hpct;
+	cards[n].temp_hist[0] = pct;	
+	set_pwm(n,hpct);
 }
 
 int select_cards(const struct dirent *drm)
