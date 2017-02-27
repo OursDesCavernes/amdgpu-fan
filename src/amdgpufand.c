@@ -12,7 +12,7 @@
 #define MAX_CARDS 8
 #define MAX_TABLE_SIZE 10
 #define MIN_PCT 0
-#define HYSTERESIS 5
+#define HYSTERESIS 6
 
 struct card {
 	int pwm;
@@ -169,7 +169,7 @@ int calc_pct(int n)
 	hpct = pct;
 	for(i=0;i<HYSTERESIS - 1;i++)
 	{
-		if(cards[n].temp_hist[i] - i > hpct)
+		if(cards[n].temp_hist[i] > hpct)
 			hpct = cards[n].temp_hist[i];
 		cards[n].temp_hist[i+1] = cards[n].temp_hist[i];
 	}
@@ -194,10 +194,21 @@ int select_hwmon(const struct dirent *hwmon)
 	return 1;
 }
 
-int isamdgpu(char *uevent)
+int isamdgpu(char *path)
 {
-	//TODO
-	return 0;
+	char buffer[255],buf[10];
+	int fd,res=-1;
+	sprintf(buffer, "%s/name",path);
+
+	fd = open(buffer,O_RDONLY);
+	if(fd<0)
+		return -1;
+	
+	if(read(fd, buf,10)>0)
+		res = strncmp(buf,"amdgpu",6);
+	close(fd);
+
+	return res;
 }
 
 int probe_cards()
@@ -205,78 +216,65 @@ int probe_cards()
 	int cardnum = 0, card = 0;
 	int i,j;
 	struct dirent **epsc;
-	cardnum = scandir ("/sys/class/drm", &epsc, select_cards, alphasort);
+	cardnum = scandir ("/sys/class/hwmon", &epsc, select_hwmon, alphasort);
 	for(i=0;i<cardnum;i++)
 	{
-		int hwmon = 0;
-		struct dirent **epsh;
-		char pathc[255];
 		int fd;
-//		sprintf(pathc, "/sys/class/drm/%s/device/uevent",epsc[i]->d_name);
-		sprintf(pathc, "/sys/class/drm/%s/device/hwmon",epsc[i]->d_name);
-		hwmon = scandir (pathc, &epsh, select_hwmon, alphasort);
-		for(j=0;j<hwmon && card < MAX_CARDS;j++)
+		char pathh[255];
+		sprintf(pathh, "/sys/class/hwmon/%s",epsc[i]->d_name);
+		if(isamdgpu(pathh) ==0 && card<MAX_CARDS )
 		{
-			char pathh[255];
-			sprintf(pathh, "/sys/class/drm/%s/device/hwmon/%s",epsc[i]->d_name,epsh[j]->d_name);
-//			printf("/sys/class/drm/%s/device/hwmon/%s\n",epsc[i]->d_name,epsh[j]->d_name);
-			if(isamdgpu(pathh) ==0 && card<MAX_CARDS )
+			char buffer[255],buf[6];
+			sprintf(buffer, "/sys/class/hwmon/%s/pwm1",epsc[i]->d_name);
+			cards[card].pwmfd = open(buffer,O_RDWR);
+			if(cards[card].pwmfd<0)
 			{
-				char buffer[255],buf[6];
-				sprintf(buffer, "/sys/class/drm/%s/device/hwmon/%s/pwm1",epsc[i]->d_name,epsh[j]->d_name);
-				cards[card].pwmfd = open(buffer,O_RDWR);
-				if(cards[card].pwmfd<0)
-				{
-					printf("Error %i opening /sys/class/drm/%s/device/hwmon/%s/pwm1\n",cards[card].pwmfd, epsc[i]->d_name, epsh[j]->d_name);
-					free(epsh[j]);
-					continue;
-				}
-				sprintf(buffer, "/sys/class/drm/%s/device/hwmon/%s/temp1_input",epsc[i]->d_name,epsh[j]->d_name);
-				cards[card].tempfd = open(buffer,O_RDONLY);
-				if(cards[card].tempfd<0)
-				{
-					printf("Error %i opening /sys/class/drm/%s/device/hwmon/%s/temp1_input",cards[card].tempfd, epsc[i]->d_name, epsh[j]->d_name);
-					close(cards[card].pwmfd);
-					free(epsh[j]);
-					continue;
-				}
-
-				sprintf(buffer, "/sys/class/drm/%s/device/hwmon/%s/pwm1_min",epsc[i]->d_name,epsh[j]->d_name);
-				fd = open(buffer,O_RDONLY);
-				if(read(fd, buf,6)<0)
-				{
-					close(fd);
-					close(cards[card].pwmfd);
-					close(cards[card].tempfd);
-					free(epsh[j]);
-					continue;
-				}
-				cards[card].pwm_min = atoi(buf);
-				close(fd);
-
-				sprintf(buffer, "/sys/class/drm/%s/device/hwmon/%s/pwm1_max",epsc[i]->d_name,epsh[j]->d_name);
-				fd = open(buffer,O_RDONLY);
-				if(read(fd, buf,6)<0)
-				{
-					close(fd);
-					close(cards[card].pwmfd);
-					close(cards[card].tempfd);
-					free(epsh[j]);
-					continue;
-				}
-				cards[card].pwm_max = atoi(buf);
-				close(fd);
-
-				cards[card].ready = true;
-				get_temp(card);
-				get_pwm(card);
-				card++;
-				free(epsh[j]);
+				printf("Error %i opening /sys/class/hwmon/%s/pwm1\n",cards[card].pwmfd, epsc[i]->d_name);
+				free(epsc[j]);
+				continue;
 			}
+			sprintf(buffer, "/sys/class/hwmon/%s/temp1_input",epsc[i]->d_name);
+			cards[card].tempfd = open(buffer,O_RDONLY);
+			if(cards[card].tempfd<0)
+			{
+				printf("Error %i opening /sys/class/hwmon/%s/temp1_input",cards[card].tempfd, epsc[i]->d_name);
+				close(cards[card].pwmfd);
+				free(epsc[j]);
+				continue;
+			}
+
+			sprintf(buffer, "/sys/class/hwmon/%s/pwm1_min",epsc[i]->d_name);
+			fd = open(buffer,O_RDONLY);
+			if(read(fd, buf,6)<0)
+			{
+				close(fd);
+				close(cards[card].pwmfd);
+				close(cards[card].tempfd);
+				free(epsc[j]);
+				continue;
+			}
+			cards[card].pwm_min = atoi(buf);
+			close(fd);
+
+			sprintf(buffer, "/sys/class/hwmon/%s/pwm1_max",epsc[i]->d_name);
+			fd = open(buffer,O_RDONLY);
+			if(read(fd, buf,6)<0)
+			{
+				close(fd);
+				close(cards[card].pwmfd);
+				close(cards[card].tempfd);
+				free(epsc[j]);
+				continue;
+			}
+			cards[card].pwm_max = atoi(buf);
+			close(fd);
+
+			cards[card].ready = true;
+			get_temp(card);
+			get_pwm(card);
+			card++;
 		}
 		free(epsc[i]);
-		if(hwmon > 0)
-			free(epsh);
 	}
 	if(cardnum > 0)
 		free(epsc);
