@@ -24,6 +24,15 @@ SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 add_executable(amdgpufand src/amdgpufand.c)
 
+include(CheckFunctionExists)
+CHECK_FUNCTION_EXISTS(clock_nanosleep CLOCK_NANOSLEEP)
+IF(CLOCK_NANOSLEEP)
+	FIND_LIBRARY(RT_LIBRARIES
+    NAMES rt
+)
+	target_link_libraries(amdgpufand RT_LIBRARIES)
+ENDIF(CLOCK_NANOSLEEP)
+
 IF(BUILD_DBUS_SUPPORT)
 	message( FATAL_ERROR "DBUS is not implemented yet" )
 	find_package(DBus REQUIRED)
