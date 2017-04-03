@@ -26,10 +26,8 @@ add_executable(amdgpufand src/amdgpufand.c)
 
 include(CheckFunctionExists)
 CHECK_FUNCTION_EXISTS(clock_nanosleep CLOCK_NANOSLEEP)
-IF(CLOCK_NANOSLEEP)
-	FIND_LIBRARY(RT_LIBRARIES
-    NAMES rt
-)
+IF(NOT CLOCK_NANOSLEEP)
+	FIND_LIBRARY(RT_LIBRARIES rt)
 	target_link_libraries(amdgpufand RT_LIBRARIES)
 ENDIF(CLOCK_NANOSLEEP)
 
