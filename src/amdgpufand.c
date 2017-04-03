@@ -12,7 +12,7 @@
 #define MAX_CARDS 8
 #define MAX_TABLE_SIZE 10
 #define MIN_PCT 0
-#define HYSTERESIS 6
+#define HYSTERESIS 1
 
 struct card {
 	int pwm;
@@ -20,12 +20,11 @@ struct card {
 	int pwm_max;
 	int pwmfd;
 	int temp;
+	int realtemp;
 	int tempfd;
 	int ready;
 	char name[1024];
-	int table[MAX_TABLE_SIZE][2];
-	int temp_hist[HYSTERESIS];
-	int hpct;};
+	int table[MAX_TABLE_SIZE][3];};
 
 typedef struct card card;
 
@@ -43,31 +42,29 @@ int data_init()
 		cards[i].pwm=-1;
 		cards[i].pwmfd=-1;
 		cards[i].temp=0;
+		cards[i].realtemp=0;
 		cards[i].tempfd=-1;
 		cards[i].ready=false;
 		for(j=0;j<MAX_TABLE_SIZE;j++)
 		{
 			cards[i].table[j][0]=0;
-			cards[i].table[j][0]=100;
+			cards[i].table[j][1]=100;
+			cards[i].table[j][2]=1;
+
 		}
 		//temporary static table
-		cards[i].table[0][0] = 40;
+		cards[i].table[0][0] = 0;
 		cards[i].table[0][1] = 0;
+		cards[i].table[0][2] = 0;
 		cards[i].table[1][0] = 45;
-		cards[i].table[1][1] = 15;
-		cards[i].table[2][0] = 50;
-		cards[i].table[2][1] = 20;
-		cards[i].table[3][0] = 55;
-		cards[i].table[3][1] = 30;
-		cards[i].table[4][0] = 60;
-		cards[i].table[4][1] = 50;
-		cards[i].table[5][0] = 70;
-		cards[i].table[5][1] = 80;
-		cards[i].table[6][0] = 80;
-		cards[i].table[6][1] = 100;
+		cards[i].table[1][1] = 16;
+		cards[i].table[2][0] = 55;
+		cards[i].table[2][1] = 30;
+		cards[i].table[3][0] = 60;
+		cards[i].table[3][1] = 50;
+		cards[i].table[4][0] = 80;
+		cards[i].table[4][1] = 100;
 	}
-	for(i=0;i<HYSTERESIS;i++)
-		cards[i].temp_hist[i] = 0;
 	
 	if(MIN_PCT<0||MIN_PCT>100)
 		exit(-1);
@@ -84,8 +81,12 @@ int get_temp(int n)
 		return -1;
 	offset = lseek(cards[n].tempfd, 0, SEEK_SET);
 	res = read(cards[n].tempfd, buf,6);
-	temp = atoi(buf);
-	cards[n].temp = temp / 1000;
+	temp = atoi(buf) / 1000;
+	if(cards[n].temp < temp)
+		cards[n].temp = temp;
+	else if(cards[n].temp > temp + 5)
+		cards[n].temp = temp + 5;
+	cards[n].realtemp = temp;
 //	printf("Card %i: temp = %i\n", n, cards[n].temp);
 }
 
@@ -132,7 +133,7 @@ int set_pwm(int n, int pct)
 	}
 	offset = lseek(cards[n].pwmfd, 0, SEEK_SET);
 	pwm = cards[n].pwm_min + (cards[n].pwm_max - cards[n].pwm_min) * pct / 100;
-//	printf("Set pwm: %i\n",pwm);
+//	printf("Set pwm: card %i:realtemp: %i, temp: %i, pct: %i\n",n,cards[n].realtemp, cards[n].temp, pct);
 	sprintf(buf, "%i%n",pwm,&len);
 	res = write(cards[n].pwmfd,buf,len);
 
@@ -141,7 +142,7 @@ int set_pwm(int n, int pct)
 
 int calc_pct(int n)
 {
-	int pct = -1,hpct, i;
+	int pct = -1, i;
 	get_temp(n);
 	for(i=0;i<MAX_TABLE_SIZE;i++)
 	{
@@ -162,22 +163,14 @@ int calc_pct(int n)
 		}
 		else if(cards[n].temp >= cards[n].table[i][0] && cards[n].temp < cards[n].table[i+1][0])
 		{
-			pct = cards[n].table[i][1] + ((cards[n].table[i+1][1] - cards[n].table[i][1]) * (cards[n].temp - cards[i].table[n][0]) / (cards[n].table[i+1][0] - cards[n].table[i][0]));
+			if(cards[n].table[i][2]==0)
+				pct = cards[n].table[i][1];
+			else
+				pct = cards[n].table[i][1] + ((cards[n].table[i+1][1] - cards[n].table[i][1]) * (cards[n].temp - cards[n].table[i][0]) / (cards[n].table[i+1][0] - cards[n].table[i][0]));
 			break;
 		}
 	}
-	hpct = pct;
-	for(i=0;i<HYSTERESIS - 1;i++)
-	{
-		if(cards[n].temp_hist[i] > hpct)
-			hpct = cards[n].temp_hist[i];
-		cards[n].temp_hist[i+1] = cards[n].temp_hist[i];
-	}
-	if(hpct + 5 < cards[n].hpct)
-		hpct = cards[n].hpct - 5;
-	cards[n].hpct = hpct;
-	cards[n].temp_hist[0] = pct;	
-	set_pwm(n,hpct);
+	set_pwm(n,pct);
 }
 
 int select_cards(const struct dirent *drm)
