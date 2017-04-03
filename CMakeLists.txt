@@ -28,7 +28,7 @@ include(CheckFunctionExists)
 CHECK_FUNCTION_EXISTS(clock_nanosleep CLOCK_NANOSLEEP)
 IF(NOT CLOCK_NANOSLEEP)
 	FIND_LIBRARY(RT_LIBRARIES rt)
-	target_link_libraries(amdgpufand RT_LIBRARIES)
+	target_link_libraries(amdgpufand ${RT_LIBRARIES})
 ENDIF(CLOCK_NANOSLEEP)
 
 IF(BUILD_DBUS_SUPPORT)
