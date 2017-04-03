@@ -10,3 +10,5 @@ Simple daemon to automaticaly manage fans from amdgpu cards
 ## Done
 * Basic detection of cards
 * Table based regulation
+* Cooldown hysteresys function to smooth regulation
+* Travis-CI integration
