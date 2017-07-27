@@ -1,3 +1,5 @@
 language: c
 script:
   - mkdir build && cd build && cmake .. && cmake --build .
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
