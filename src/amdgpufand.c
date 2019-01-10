@@ -262,6 +262,18 @@ int probe_cards()
 			cards[card].pwm_max = atoi(buf);
 			close(fd);
 
+			sprintf(buffer, "/sys/class/hwmon/%s/pwm1_enable",epsc[i]->d_name);
+			fd = open(buffer,O_RDWR);
+			if(write(fd,"1",2)<0)
+			{
+				close(fd);
+				close(cards[card].pwmfd);
+				close(cards[card].tempfd);
+				free(epsc[j]);
+				continue;
+			}
+			close(fd);
+			
 			cards[card].ready = true;
 			get_temp(card);
 			get_pwm(card);
