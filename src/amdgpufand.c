@@ -22,6 +22,7 @@ struct card {
 	int temp;
 	int realtemp;
 	int tempfd;
+	int modefd;
 	int ready;
 	char name[1024];
 	int table[MAX_TABLE_SIZE][3];};
@@ -44,6 +45,7 @@ int data_init()
 		cards[i].temp=0;
 		cards[i].realtemp=0;
 		cards[i].tempfd=-1;
+		cards[i].modefd=-1;
 		cards[i].ready=false;
 		for(j=0;j<MAX_TABLE_SIZE;j++)
 		{
@@ -136,6 +138,7 @@ int set_pwm(int n, int pct)
 //	printf("Set pwm: card %i:realtemp: %i, temp: %i, pct: %i\n",n,cards[n].realtemp, cards[n].temp, pct);
 	sprintf(buf, "%i%n",pwm,&len);
 	res = write(cards[n].pwmfd,buf,len);
+	res = write(cards[n].modefd, "1",2);
 
 	return 0;
 }
@@ -236,6 +239,17 @@ int probe_cards()
 				continue;
 			}
 
+			sprintf(buffer, "/sys/class/hwmon/%s/pwm1_enable",epsc[i]->d_name);
+			cards[card].modefd = open(buffer,O_RDWR);
+			if(cards[card].modefd<0 || write(cards[card].modefd, "1",2)<0)
+			{
+				close(fd);
+				close(cards[card].pwmfd);
+				close(cards[card].tempfd);
+				free(epsc[j]);
+				continue;
+			}
+
 			sprintf(buffer, "/sys/class/hwmon/%s/pwm1_min",epsc[i]->d_name);
 			fd = open(buffer,O_RDONLY);
 			if(read(fd, buf,6)<0)
@@ -243,6 +257,7 @@ int probe_cards()
 				close(fd);
 				close(cards[card].pwmfd);
 				close(cards[card].tempfd);
+				close(cards[card].modefd);
 				free(epsc[j]);
 				continue;
 			}
@@ -256,6 +271,7 @@ int probe_cards()
 				close(fd);
 				close(cards[card].pwmfd);
 				close(cards[card].tempfd);
+				close(cards[card].modefd);
 				free(epsc[j]);
 				continue;
 			}
