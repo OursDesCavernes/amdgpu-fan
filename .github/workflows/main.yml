@@ -10,9 +10,9 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Create build directory
-      run: mkdir build && cd build
+      run: ls && mkdir build
     - name: Cmake
-      run: cmake ..
+      run: cd build && cmake ..
     - name: Build
-      run: cmake --build .
+      run: cd build && cmake --build .
     
