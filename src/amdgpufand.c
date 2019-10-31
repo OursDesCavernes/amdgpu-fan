@@ -216,7 +216,7 @@ int probe_cards()
 	for(i=0;i<cardnum;i++)
 	{
 		int fd;
-		char pathh[255];
+		char pathh[300];
 		sprintf(pathh, "/sys/class/hwmon/%s",epsc[i]->d_name);
 		if(isamdgpu(pathh) ==0 && card<MAX_CARDS )
 		{
